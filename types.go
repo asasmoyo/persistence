@@ -72,9 +72,19 @@ type SystemState struct {
 	NodeName string
 }
 
+// PacketLoader interface implemented by each session when it restored from persistence
+type PacketLoader interface {
+	LoadPersistedPacket(PersistedPacket) error
+}
+
+// SessionLoader implemented by session manager to load persisted sessions when server starts/restarts
+type SessionLoader interface {
+	LoadSession(interface{}, []byte, *SessionState) error
+}
+
 // Packets interface for connection to handle packets
 type Packets interface {
-	PacketsForEach([]byte, func(PersistedPacket) error) error
+	PacketsForEach([]byte, PacketLoader) error
 	PacketsStore([]byte, []PersistedPacket) error
 }
 
@@ -105,10 +115,11 @@ type Sessions interface {
 	Packets
 	Subscriptions
 	State
-	LoadForEach(func([]byte, *SessionState) error) error
+	Count() uint64
+	LoadForEach(SessionLoader, interface{}) error
 	PacketStore([]byte, PersistedPacket) error
 	PacketsDelete([]byte) error
-	Exists(id []byte) bool
+	Exists([]byte) bool
 	Delete([]byte) error
 }
 

@@ -2,11 +2,13 @@ package persistence
 
 import (
 	"sync"
+	"sync/atomic"
 )
 
 type sessions struct {
 	status  *dbStatus
 	entries sync.Map
+	count   uint64
 }
 
 type session struct {
@@ -20,8 +22,15 @@ func (s *sessions) Exists(id []byte) bool {
 	return ok
 }
 
+func (s *sessions) Count() uint64 {
+	return atomic.LoadUint64(&s.count)
+}
+
 func (s *sessions) SubscriptionsStore(id []byte, data []byte) error {
-	elem, _ := s.entries.LoadOrStore(string(id), &session{})
+	elem, loaded := s.entries.LoadOrStore(string(id), &session{})
+	if !loaded {
+		atomic.AddUint64(&s.count, 1)
+	}
 
 	ses := elem.(*session)
 	ses.lock.Lock()
@@ -46,12 +55,12 @@ func (s *sessions) SubscriptionsDelete(id []byte) error {
 	return nil
 }
 
-func (s *sessions) PacketsForEach(id []byte, load func(PersistedPacket) error) error {
+func (s *sessions) PacketsForEach(id []byte, loader PacketLoader) error {
 	if elem, ok := s.entries.Load(string(id)); ok {
 		ses := elem.(*session)
 
 		for _, p := range ses.packets {
-			load(p) // nolint: errcheck
+			loader.LoadPersistedPacket(p) // nolint: errcheck
 		}
 	}
 
@@ -59,13 +68,16 @@ func (s *sessions) PacketsForEach(id []byte, load func(PersistedPacket) error) e
 }
 
 func (s *sessions) PacketsStore(id []byte, packets []PersistedPacket) error {
-	if elem, ok := s.entries.Load(string(id)); ok {
-		ses := elem.(*session)
-
-		ses.lock.Lock()
-		ses.packets = append(ses.packets, packets...)
-		ses.lock.Unlock()
+	elem, loaded := s.entries.LoadOrStore(string(id), &session{})
+	if !loaded {
+		atomic.AddUint64(&s.count, 1)
 	}
+
+	ses := elem.(*session)
+
+	ses.lock.Lock()
+	ses.packets = append(ses.packets, packets...)
+	ses.lock.Unlock()
 
 	return nil
 }
@@ -83,22 +95,26 @@ func (s *sessions) PacketsDelete(id []byte) error {
 }
 
 func (s *sessions) PacketStore(id []byte, packet PersistedPacket) error {
-	if elem, ok := s.entries.Load(string(id)); ok {
-		ses := elem.(*session)
-
-		ses.lock.Lock()
-		ses.packets = append(ses.packets, packet)
-		ses.lock.Unlock()
+	elem, loaded := s.entries.LoadOrStore(string(id), &session{})
+	if !loaded {
+		atomic.AddUint64(&s.count, 1)
 	}
+
+	ses := elem.(*session)
+
+	ses.lock.Lock()
+	ses.packets = append(ses.packets, packet)
+	ses.lock.Unlock()
+
 	return nil
 }
 
-func (s *sessions) LoadForEach(load func([]byte, *SessionState) error) error {
+func (s *sessions) LoadForEach(loader SessionLoader, context interface{}) error {
 	var err error
 	s.entries.Range(func(key, value interface{}) bool {
 		sID := []byte(key.(string))
 		ses := value.(*SessionState)
-		err = load(sID, ses)
+		err = loader.LoadSession(context, sID, ses)
 		return err == nil
 	})
 
@@ -106,7 +122,11 @@ func (s *sessions) LoadForEach(load func([]byte, *SessionState) error) error {
 }
 
 func (s *sessions) StateStore(id []byte, state *SessionState) error {
-	elem, _ := s.entries.LoadOrStore(string(id), &session{})
+	elem, loaded := s.entries.LoadOrStore(string(id), &session{})
+	if !loaded {
+		atomic.AddUint64(&s.count, 1)
+	}
+
 	ses := elem.(*session)
 	ses.lock.Lock()
 	defer ses.lock.Unlock()
@@ -135,5 +155,6 @@ func (s *sessions) StateDelete(id []byte) error {
 // Delete
 func (s *sessions) Delete(id []byte) error {
 	s.entries.Delete(string(id))
+	atomic.AddUint64(&s.count, ^uint64(0))
 	return nil
 }
