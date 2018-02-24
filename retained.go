@@ -2,20 +2,20 @@ package persistence
 
 type retained struct {
 	status  *dbStatus
-	packets []PersistedPacket
+	packets PersistedPackets
 }
 
-func (r *retained) Load() ([]PersistedPacket, error) {
+func (r *retained) Load() (PersistedPackets, error) {
 	return r.packets, nil
 }
 
-func (r *retained) Store(data []PersistedPacket) error {
+func (r *retained) Store(data PersistedPackets) error {
 	r.packets = data
 
 	return nil
 }
 
 func (r *retained) Wipe() error {
-	r.packets = []PersistedPacket{}
+	r.packets = PersistedPackets{}
 	return nil
 }

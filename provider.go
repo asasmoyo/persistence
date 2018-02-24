@@ -6,11 +6,10 @@ type dbStatus struct {
 
 type impl struct {
 	status dbStatus
-
-	r    retained
-	s    sessions
-	subs subscriptions
-	sys  system
+	r      retained
+	s      sessions
+	subs   subscriptions
+	sys    system
 }
 
 // Default allocate new persistence provider of in memory type

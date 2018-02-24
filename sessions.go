@@ -14,8 +14,10 @@ type sessions struct {
 type session struct {
 	lock    sync.Mutex
 	state   *SessionState
-	packets []PersistedPacket
+	packets PersistedPackets
 }
+
+var _ Sessions = (*sessions)(nil)
 
 func (s *sessions) Exists(id []byte) bool {
 	_, ok := s.entries.Load(string(id))
@@ -67,7 +69,7 @@ func (s *sessions) PacketsForEach(id []byte, loader PacketLoader) error {
 	return nil
 }
 
-func (s *sessions) PacketsStore(id []byte, packets []PersistedPacket) error {
+func (s *sessions) PacketsStore(id []byte, packets PersistedPackets) error {
 	elem, loaded := s.entries.LoadOrStore(string(id), &session{})
 	if !loaded {
 		atomic.AddUint64(&s.count, 1)
@@ -87,14 +89,14 @@ func (s *sessions) PacketsDelete(id []byte) error {
 		ses := elem.(*session)
 
 		ses.lock.Lock()
-		ses.packets = []PersistedPacket{}
+		ses.packets = PersistedPackets{}
 		ses.lock.Unlock()
 	}
 
 	return nil
 }
 
-func (s *sessions) PacketStore(id []byte, packet PersistedPacket) error {
+func (s *sessions) PacketStore(id []byte, pkt *PersistedPacket) error {
 	elem, loaded := s.entries.LoadOrStore(string(id), &session{})
 	if !loaded {
 		atomic.AddUint64(&s.count, 1)
@@ -103,7 +105,7 @@ func (s *sessions) PacketStore(id []byte, packet PersistedPacket) error {
 	ses := elem.(*session)
 
 	ses.lock.Lock()
-	ses.packets = append(ses.packets, packet)
+	ses.packets = append(ses.packets, pkt)
 	ses.lock.Unlock()
 
 	return nil

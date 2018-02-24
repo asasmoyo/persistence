@@ -39,21 +39,32 @@ func (e Errors) Error() string {
 		return s
 	}
 
-	return "unknown error"
+	return "persistence: unknown error"
 }
 
 // PersistedPacket wraps packet to handle misc cases like expiration
 type PersistedPacket struct {
-	UnAck    bool
+	// ExpireAt shows either packet has expiration value
 	ExpireAt string
-	Data     []byte
+	// Data is encoded byte stream as it goes over network
+	Data []byte
+
+	Flags struct {
+		// UnAck if packet waits acknowledgment from client
+		UnAck bool
+	}
 }
+
+// PersistedPackets array of persisted packets
+type PersistedPackets []*PersistedPacket
 
 // SessionDelays formerly known as expiry set timestamp to handle will delay and/or expiration
 type SessionDelays struct {
 	Since    string
 	ExpireIn string
-	WillIn   string
+	// WillIn timestamp when will publish must occur
+	WillIn string
+	// WillData encoded packet
 	WillData []byte
 }
 
@@ -72,12 +83,12 @@ type SystemState struct {
 	NodeName string
 }
 
-// PacketLoader interface implemented by each session when it restored from persistence
+// PacketLoader interface must be implemented by session
 type PacketLoader interface {
-	LoadPersistedPacket(PersistedPacket) error
+	LoadPersistedPacket(*PersistedPacket) error
 }
 
-// SessionLoader implemented by session manager to load persisted sessions when server starts/restarts
+// SessionLoader implemented by session manager to load persisted sessions when server starts
 type SessionLoader interface {
 	LoadSession(interface{}, []byte, *SessionState) error
 }
@@ -85,7 +96,7 @@ type SessionLoader interface {
 // Packets interface for connection to handle packets
 type Packets interface {
 	PacketsForEach([]byte, PacketLoader) error
-	PacketsStore([]byte, []PersistedPacket) error
+	PacketsStore([]byte, PersistedPackets) error
 }
 
 // Subscriptions session subscriptions interface
@@ -103,9 +114,9 @@ type State interface {
 // Retained provider for load/store retained messages
 type Retained interface {
 	// Store persist retained message
-	Store([]PersistedPacket) error
+	Store(PersistedPackets) error
 	// Load load retained messages
-	Load() ([]PersistedPacket, error)
+	Load() (PersistedPackets, error)
 	// Wipe retained storage
 	Wipe() error
 }
@@ -117,7 +128,7 @@ type Sessions interface {
 	State
 	Count() uint64
 	LoadForEach(SessionLoader, interface{}) error
-	PacketStore([]byte, PersistedPacket) error
+	PacketStore([]byte, *PersistedPacket) error
 	PacketsDelete([]byte) error
 	Exists([]byte) bool
 	Delete([]byte) error
